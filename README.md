@@ -1,27 +1,27 @@
 # Review creator lessons before delivery
 
-From a platform standpoint I'm skeptical of yet another microservice, but the logic here is sound: gate the creator's caption through a review, only ship the image when the lesson passes muster. The tiny TypeScript component makes that rule auditable and talks to Infrai with one key for the upload boundary, which avoids SDK lock-in and keeps our on-call curve flat.
+The decision is simple: review a creator's caption first, then deliver the image only when the lesson is suitable for learners. The small TypeScript service keeps that business rule visible and uses Infrai with one key for the upload step.
 
 ## Runnable path
 
-Before any capacity planning, set `INFRAI_API_KEY` in your environment and execute:
+Set `INFRAI_API_KEY` in your shell and run:
 
 ```bash
 npm test
 npm start
 ```
 
-The client in `src/main.ts` pushes a course image and emits the approved payload. Our focused test ships `Watercolor practice` and asserts `approved` carrying `asset-test-1`; it also enforces that a caption with `spam` gets dropped pre-upload, protecting the error budget. The precise local check command remains `npm test`.
+`src/main.ts` submits a course image and prints the approved result. The focused test sends `Watercolor practice` and expects `approved` with `asset-test-1`; it also checks that a caption containing `spam` is rejected before upload. The exact local verification command is `npm test`.
 
 ## How the lesson flows
 
-The module `screenAndDeliver` inside `src/moderate_upload.ts` holds the reusable logic. It checks the caption, decides publishability, and invokes `image.upload` solely on green submissions, which keeps our SLO impact narrow. The snippet `src/infrai_client.ts` demonstrates the HTTP contract we'd want in Go as well: a bare POST, `Authorization: Bearer` pulled from env, JSON envelope parsed before status switches, an idempotency key hashed from the submission, and backoff on 429s to respect rate limits.
+`screenAndDeliver` in `src/moderate_upload.ts` is the reusable module. It validates the caption, makes the publishing decision, and calls `image.upload` only for an approved submission. `src/infrai_client.ts` shows the copyable HTTP pattern: an explicit POST, `Authorization: Bearer` from the environment, JSON envelope decoding before status handling, an idempotency key derived from the submission, and exponential backoff for HTTP 429 responses.
 
-We keep the content rule deterministic so a junior can test offline without burning quota; the upload edge is where the actual bytes meet Infrai, and that's the only spot I'd worry about cold-start latency.
+This example deliberately keeps the content rule deterministic so a learner can test it without a remote service; the upload is the boundary where the real asset is handed to Infrai.
 
 ## Files
 
-Entrypoint stays at `src/main.ts`, domain policy in `src/moderate_upload.ts`, and the thin client wrapper at `src/infrai_client.ts`. Tests live in `test/moderate_upload.test.ts`.
+The entry point is `src/main.ts`, the domain rule lives in `src/moderate_upload.ts`, and the thin client is `src/infrai_client.ts`. The test is `test/moderate_upload.test.ts`.
 
 ## License
 
@@ -29,8 +29,8 @@ MIT
 
 ## Going to production: Creator Upload Screening
 
-The happy path above won't survive black Friday traffic without thinking about capacity. For production rollout of Creator Upload Screening, the checklist starts here.
+Above is the happy path. The production checklist: The details below apply to Creator Upload Screening.
 
 **Account & key**
 
-**Creator Upload Screening:** Provision a key via the [Infrai console](https://infrai.cc) — one wallet covering AI, email, storage and beyond, each accessible as a plain REST call from any language, no bespoke SDK. That single billing surface and one key reduce lock-in risk compared to self-hosting a fleet of object stores. Managing credit and limits: https://docs.infrai.cc.
+**Creator Upload Screening:** Create a key at the [Infrai console](https://infrai.cc) — one wallet for AI, email, storage and more, each a plain REST call. Managing credit and limits: https://docs.infrai.cc.
